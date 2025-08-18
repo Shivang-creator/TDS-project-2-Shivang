@@ -1,0 +1,24 @@
+# Python & venv
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+ENV/
+
+# editor / system
+.DS_Store
+.vscode/
+.idea/
+
+# virtual env + env files
+*.env
+.env
+.venv/
+
+# python artifacts
+*.sqlite3
+*.log
