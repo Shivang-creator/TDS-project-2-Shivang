@@ -87,7 +87,7 @@ Now open [**http://localhost:8000/**](http://localhost:8000/) in your browser ðŸ
 |--------|-----------|----------|
 | `GET`  | `/`       | Access web app |
 | `POST` | `/api`    | Submit dataset + questions |
-| `GET`  | `/summary`| App diagnostics & summaries |
+| `GET`  | `/summary`| App diagnostics (returns 404 unless `ENABLE_DIAGNOSTICS=1` is set) |
 
 ---
 

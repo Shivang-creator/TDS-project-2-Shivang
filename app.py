@@ -422,8 +422,18 @@ def plot_to_base64(max_bytes=100000):
     tmp.close()
 
     try:
+        # This runs code written by the model from text the caller uploaded, so the caller
+        # effectively chooses what runs. Do not hand that code the API keys or the app folder.
+        # This is damage limitation, not a sandbox: the code still has network and file access
+        # as the server's own user.
+        child_env = {
+            k: v for k, v in os.environ.items()
+            if not (k.lower().startswith(("gemini_api", "google_", "gemini_"))
+                    or k.upper().endswith(("_KEY", "_TOKEN", "_SECRET", "_PASSWORD")))
+        }
         completed = subprocess.run([sys.executable, tmp_path],
-                                   capture_output=True, text=True, timeout=timeout)
+                                   capture_output=True, text=True, timeout=timeout,
+                                   env=child_env, cwd=tempfile.gettempdir())
         if completed.returncode != 0:
             # collect stderr and stdout for debugging
             return {"status": "error", "message": completed.stderr.strip() or completed.stdout.strip()}
@@ -844,7 +854,7 @@ def _env_check(required=None):
     required = required or []
     out = {}
     for k in required:
-        out[k] = {"present": bool(os.getenv(k)), "masked": (os.getenv(k)[:4] + "..." + os.getenv(k)[-4:]) if os.getenv(k) else None}
+        out[k] = {"present": bool(os.getenv(k))}  # never echo any part of a key
     # Also include simple helpful values
     out["GOOGLE_MODEL"] = os.getenv("GOOGLE_MODEL")
     out["LLM_TIMEOUT_SECONDS"] = os.getenv("LLM_TIMEOUT_SECONDS")
@@ -1017,12 +1027,12 @@ async def check_llm_keys_models():
         completed = await asyncio.gather(*[asyncio.create_task(t) for t in tasks], return_exceptions=True)
         model_summary = {"model": model, "attempts": []}
         any_ok = False
-        for key, res in zip(_GEMINI_KEYS, completed):
+        for index, (key, res) in enumerate(zip(_GEMINI_KEYS, completed), start=1):
             if isinstance(res, Exception):
-                model_summary["attempts"].append({"key_mask": (key[:4] + "..." + key[-4:]) if key else None, "ok": False, "error": str(res)})
+                model_summary["attempts"].append({"key_number": index, "ok": False, "error": str(res)})
             else:
                 # res is dict returned by _test_gemini_key_model
-                model_summary["attempts"].append({"key_mask": (key[:4] + "..." + key[-4:]) if key else None, **res})
+                model_summary["attempts"].append({"key_number": index, **res})
                 if res.get("ok"):
                     any_ok = True
         results.append(model_summary)
@@ -1062,6 +1072,10 @@ from fastapi import Query
 
 @app.get("/summary")
 async def diagnose(full: bool = Query(False, description="If true, run extended checks (duckdb/playwright)")):
+    # This page lists system details and calls the model once per API key on every visit.
+    # It is a debugging aid, so it is off unless ENABLE_DIAGNOSTICS=1 is set.
+    if os.getenv("ENABLE_DIAGNOSTICS") != "1":
+        raise HTTPException(404, "Not found")
     started = datetime.utcnow()
     report = {
         "status": "ok",
